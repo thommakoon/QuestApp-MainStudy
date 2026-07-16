@@ -125,12 +125,6 @@ public class GameManager : MonoBehaviour
             return false;
         }
 
-        if (condition == Study.ConditionType.HandPinch)
-        {
-            Debug.LogWarning("[MainStudy] HandPinch not used in main study commander");
-            return false;
-        }
-
         int safeReps = Mathf.Max(1, reps);
         float safeDur = Mathf.Max(1f, durationSec);
         study = Study.FromPcCommand(subNum, subsubNum, condition, safeReps, safeDur);
@@ -416,38 +410,58 @@ public class GameManager : MonoBehaviour
     {
         float currentTime = Time.realtimeSinceStartup;
         long unixTimeMilliseconds = (long)(DateTime.UtcNow - new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc)).TotalMilliseconds;
-        Vector3 currentTargetPosition = targetControl.getOneTarget(study.fittsLaw.endNum).position;
+        string formattedTime = DateTime.Now.ToString("yyyy MM dd HH mm ss fff");
+        Transform endTargetTf = targetControl.getOneTarget(study.fittsLaw.endNum);
+        Vector3 currentTargetPosition = endTargetTf.position;
+        TargetBehaviour targetBehaviour = endTargetTf.GetComponent<TargetBehaviour>();
+        float currentDwellTime = targetBehaviour != null ? targetBehaviour.currentDwellTime : 0f;
 
         switch (study.currentCursor)
         {
             case Study.CursorType.Eye:
             {
                 var gp = cursorController.gazeProvider;
+                Ray eyeRay = new Ray(cursorController.eyePosition, cursorController.eyeDirection);
                 EyeCursorData currentEyeCursor = new EyeCursorData(
-                    new Ray(cursorController.eyePosition, cursorController.eyeDirection),
+                    eyeRay,
                     neonGazeT: gp != null ? gp.LastNeonTimestampSec : double.NaN,
                     neonGazeTNs: gp != null ? gp.LastNeonTimestampNs : 0,
                     questGazeReceivedUnixMs: gp != null ? gp.LastQuestReceivedUnixMs : 0);
                 float eye_angularDistance = Vector3.Angle((currentTargetPosition - cursorController.eyePosition), cursorController.eyeDirection);
-                data_to_save_eye.Add(new FrameData<EyeCursorData>(currentTime, unixTimeMilliseconds, study.fittsLaw, head, currentEyeCursor,
-                    currentTargetPosition, eye_angularDistance, _trialLogSeq));
+                data_to_save_eye.Add(new FrameData<EyeCursorData>(
+                    currentTime, unixTimeMilliseconds, formattedTime, study.fittsLaw, head, currentEyeCursor,
+                    currentTargetPosition, eye_angularDistance, RayHitName(eyeRay), currentDwellTime, _trialLogSeq));
                 break;
             }
             case Study.CursorType.Head:
-                HeadCursorData currentHeadCursor = new HeadCursorData(new Ray(cursorController.headPosition, cursorController.headDirection));
+            {
+                Ray headRay = new Ray(cursorController.headPosition, cursorController.headDirection);
+                HeadCursorData currentHeadCursor = new HeadCursorData(headRay);
                 float head_angularDistance = Vector3.Angle((currentTargetPosition - currentHeadCursor.origin), currentHeadCursor.direction);
-                data_to_save_head.Add(new FrameData<HeadCursorData>(currentTime, unixTimeMilliseconds, study.fittsLaw, head, currentHeadCursor,
-                    currentTargetPosition, head_angularDistance, _trialLogSeq));
+                data_to_save_head.Add(new FrameData<HeadCursorData>(
+                    currentTime, unixTimeMilliseconds, formattedTime, study.fittsLaw, head, currentHeadCursor,
+                    currentTargetPosition, head_angularDistance, RayHitName(headRay), currentDwellTime, _trialLogSeq));
                 break;
+            }
             case Study.CursorType.Hand:
+            {
                 HandCursorData currentHandCursor = new HandCursorData(cursorController.Handray);
                 float hand_angularDistance = Vector3.Angle((currentTargetPosition - currentHandCursor.origin), currentHandCursor.direction);
-                data_to_save_hand.Add(new FrameData<HandCursorData>(currentTime, unixTimeMilliseconds, study.fittsLaw, head, currentHandCursor,
-                    currentTargetPosition, hand_angularDistance, _trialLogSeq));
+                data_to_save_hand.Add(new FrameData<HandCursorData>(
+                    currentTime, unixTimeMilliseconds, formattedTime, study.fittsLaw, head, currentHandCursor,
+                    currentTargetPosition, hand_angularDistance, RayHitName(cursorController.Handray), currentDwellTime, _trialLogSeq));
                 break;
+            }
         }
 
         _trialLogSeq++;
+    }
+
+    static string RayHitName(Ray ray)
+    {
+        if (Physics.Raycast(ray, out RaycastHit hit))
+            return hit.transform.name;
+        return "None";
     }
 
     //public void SetInputMethod(string method)

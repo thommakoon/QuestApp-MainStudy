@@ -9670,7 +9670,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 1a944185c6d2eff49ae921e48532e0a8, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  serverIp: 192.168.0.3
+  serverIp: 192.168.0.50
   serverPort: 5051
   autoConnectOnStart: 1
   autoReconnect: 1

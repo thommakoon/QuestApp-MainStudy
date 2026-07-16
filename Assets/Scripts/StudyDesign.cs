@@ -51,7 +51,7 @@ namespace StudyDesign
             TOTAL_REP = _total_repetition;
             commandedMode = false;
             trialDurationSec = 0f;
-            InitLatinSquareConditions();
+            InitFixedConditions();
             StudyTypes = new StudyType[] { StudyType.Fitts };
             SetCondition();
         }
@@ -80,56 +80,15 @@ namespace StudyDesign
             // Used by FromPcCommand only.
         }
 
-        void InitLatinSquareConditions()
+        void InitFixedConditions()
         {
-            if (sub_num % 6 == 0)
+            // Fixed study order (no latin square): EyeDwell → HandPinch → EyePinch.
+            Conditions = new ConditionType[]
             {
-                Conditions = new ConditionType[] { ConditionType.EyeDwell, ConditionType.EyePinch, ConditionType.HeadDwell, ConditionType.HeadPinch };
-                if (subsub_num == 3)
-                {
-                    Conditions = new ConditionType[] { ConditionType.EyeDwell, ConditionType.HeadDwell, ConditionType.HeadPinch, ConditionType.EyePinch };
-                }
-            }
-            else if (sub_num % 6 == 1)
-            {
-                Conditions = new ConditionType[] { ConditionType.EyeDwell, ConditionType.HeadDwell, ConditionType.HeadPinch, ConditionType.EyePinch };
-                if (subsub_num == 3)
-                {
-                    Conditions = new ConditionType[] { ConditionType.EyePinch, ConditionType.HeadDwell, ConditionType.HeadPinch, ConditionType.EyeDwell };
-                }
-            }
-            else if (sub_num % 6 == 2)
-            {
-                Conditions = new ConditionType[] { ConditionType.EyePinch, ConditionType.HeadDwell, ConditionType.HeadPinch, ConditionType.EyeDwell };
-                if (subsub_num == 3)
-                {
-                    Conditions = new ConditionType[] { ConditionType.EyePinch, ConditionType.EyeDwell, ConditionType.HeadDwell, ConditionType.HeadPinch };
-                }
-            }
-            else if (sub_num % 6 == 3)
-            {
-                Conditions = new ConditionType[] { ConditionType.EyePinch, ConditionType.EyeDwell, ConditionType.HeadDwell, ConditionType.HeadPinch };
-                if (subsub_num == 3)
-                {
-                    Conditions = new ConditionType[] { ConditionType.HeadDwell, ConditionType.HeadPinch, ConditionType.EyeDwell, ConditionType.EyePinch };
-                }
-            }
-            else if (sub_num % 6 == 4)
-            {
-                Conditions = new ConditionType[] { ConditionType.HeadDwell, ConditionType.HeadPinch, ConditionType.EyeDwell, ConditionType.EyePinch };
-                if (subsub_num == 3)
-                {
-                    Conditions = new ConditionType[] { ConditionType.HeadDwell, ConditionType.HeadPinch, ConditionType.EyePinch, ConditionType.EyeDwell };
-                }
-            }
-            else if (sub_num % 6 == 5)
-            {
-                Conditions = new ConditionType[] { ConditionType.HeadDwell, ConditionType.HeadPinch, ConditionType.EyePinch, ConditionType.EyeDwell };
-                if (subsub_num == 3)
-                {
-                    Conditions = new ConditionType[] { ConditionType.EyeDwell, ConditionType.EyePinch, ConditionType.HeadDwell, ConditionType.HeadPinch };
-                }
-            }
+                ConditionType.EyeDwell,
+                ConditionType.HandPinch,
+                ConditionType.EyePinch,
+            };
         }
         public void SetCondition()
         {
@@ -154,6 +113,9 @@ namespace StudyDesign
                 case ConditionType.EyeDwell:
                     currentCursor = CursorType.Eye;
                     break;
+                case ConditionType.HandPinch:
+                    currentCursor = CursorType.Hand;
+                    break;
                 case ConditionType.HeadDwell:
                 case ConditionType.HeadPinch:
                     currentCursor = CursorType.Head;
@@ -162,17 +124,6 @@ namespace StudyDesign
                     currentCursor = CursorType.Hand;
                     break;
             }
-
-            //switch (currentCursor)
-            //{
-            //    case CursorType.Eye:
-            //        GameManager.instance.inputMethod.SetEyePointer();
-            //        break;
-            //    case CursorType.Hand:
-            //        GameManager.instance.inputMethod.SetHandRayPointer();
-            //        break;
-
-            //}
         }
 
         public void SetSelection()
@@ -532,7 +483,9 @@ namespace StudyDesign
     public class FrameData<T>
     {
         public float timestamp { get; set; }
-        public long unixTimeMilliseconds; 
+        public long unixTimeMilliseconds;
+        /// <summary>Local wall-clock string (QuestApp format): "yyyy MM dd HH mm ss fff".</summary>
+        public string formattedTime;
         public SerializableVector3 head_origin;
         public SerializableVector3 head_forward;
         public SerializableVector3 head_rotation;
@@ -545,12 +498,28 @@ namespace StudyDesign
         public int end_num;
         public int step_num;
         public int sample_seq;
+        /// <summary>Collider name under cursor ray, or "None".</summary>
+        public string hit_target;
+        /// <summary>Active end-target dwell accumulator (seconds).</summary>
+        public float current_dwell_time;
 
 
-        public FrameData(float _timestamp, long _unixTimeMilliseconds, StudyDesign.FittsLaw currentFittsLaw, Transform _head, T _cursorData, Vector3 _target_position, float _cursor_angular_distance, int _sample_seq = 0)
+        public FrameData(
+            float _timestamp,
+            long _unixTimeMilliseconds,
+            string _formattedTime,
+            StudyDesign.FittsLaw currentFittsLaw,
+            Transform _head,
+            T _cursorData,
+            Vector3 _target_position,
+            float _cursor_angular_distance,
+            string _hitTarget,
+            float _current_dwell_time,
+            int _sample_seq = 0)
         {
             timestamp = _timestamp;
             unixTimeMilliseconds = _unixTimeMilliseconds;
+            formattedTime = _formattedTime;
             head_origin = _head.position;
             head_forward = _head.forward;
             head_rotation = _head.rotation.eulerAngles;
@@ -562,7 +531,8 @@ namespace StudyDesign
             end_num = currentFittsLaw.endNum;
             step_num = currentFittsLaw.stepNum;
             sample_seq = _sample_seq;
-
+            hit_target = _hitTarget;
+            current_dwell_time = _current_dwell_time;
         }
     }
 

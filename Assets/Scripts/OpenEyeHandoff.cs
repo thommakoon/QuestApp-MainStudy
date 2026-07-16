@@ -2,9 +2,7 @@ using System.Collections;
 using UnityEngine;
 
 /// <summary>
-/// MainStudy side: on PC "Recalibrate" (TCP launchApp), launch OpenEye and quit
-/// to free the PC TCP socket for calibration.
-/// Add to the same GameObject as OpenEyeGazeReceiver.
+/// MainStudy side: on PC "Recalibrate" (TCP launchApp), launch OpenEye then quit.
 /// </summary>
 public class OpenEyeHandoff : MonoBehaviour
 {
@@ -15,7 +13,7 @@ public class OpenEyeHandoff : MonoBehaviour
     public OpenEyeGazeReceiver receiver;
 
     [Header("Behavior")]
-    [SerializeField] float disconnectDelaySec = 0.3f;
+    [SerializeField] float quitAfterLaunchSec = 0.8f;
 
     bool _launching;
 
@@ -42,6 +40,7 @@ public class OpenEyeHandoff : MonoBehaviour
     void HandleLaunchApp(string packageFromPc)
     {
         string package = string.IsNullOrEmpty(packageFromPc) ? openEyePackageName : packageFromPc;
+        Debug.Log($"[OpenEyeHandoff] launchApp received → {package}");
         LaunchOpenEye(package);
     }
 
@@ -62,18 +61,19 @@ public class OpenEyeHandoff : MonoBehaviour
     {
         Debug.Log($"[OpenEyeHandoff] Handoff to {package}");
 
-        if (receiver != null)
-            receiver.Disconnect();
-
-        yield return new WaitForSeconds(disconnectDelaySec);
-
         if (!QuestAppLauncher.TryLaunch(package))
         {
-            Debug.LogError($"[OpenEyeHandoff] Could not launch {package}. Is OpenEye installed?");
+            Debug.LogError($"[OpenEyeHandoff] Could not launch {package}. Is OpenEye installed? Check <queries>.");
             _launching = false;
             yield break;
         }
 
+        yield return new WaitForSecondsRealtime(quitAfterLaunchSec);
+
+        if (receiver != null)
+            receiver.Disconnect();
+
+        yield return null;
         QuestAppLauncher.QuitCurrentApp();
     }
 }

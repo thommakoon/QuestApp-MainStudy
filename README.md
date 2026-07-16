@@ -16,7 +16,7 @@ Practice APK (`com.PracticeMG.MRstressPRACTICE`) and this APK (`com.PracticeMG.M
 
 | Parameter | Value |
 |-----------|--------|
-| Conditions | `EyeDwell`, `EyePinch`, `HeadDwell`, `HeadPinch` (PC chooses order) |
+| Conditions | `EyeDwell`, `HandPinch`, `EyePinch` (fixed order; HandPinch = hand ray + pinch) |
 | Tasks | **Fitts only** (no Menu) |
 | Reps per PC start | Configurable (default **3**) |
 | Duration per rep | Configurable (default **5 min**); Fitts ring loops until time is up |

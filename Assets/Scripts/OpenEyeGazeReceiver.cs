@@ -13,7 +13,7 @@ using UnityEngine;
 public class OpenEyeGazeReceiver : MonoBehaviour
 {
     [Header("PC running openeye-quest-gui")]
-    public string serverIp = "192.168.0.245";
+    public string serverIp = "192.168.0.50";
     public int serverPort = 5051;
 
     [Header("Connection")]
@@ -90,14 +90,38 @@ public class OpenEyeGazeReceiver : MonoBehaviour
     public long GazeSequence => _gazeSeq;
     public bool HasGaze => _gazeSeq > 0;
 
+    bool _didStartupBounce;
+    float _connectedAt = -1f;
+    long _gazeSeqWhenConnected;
+
     void Start()
     {
         if (GetComponent<OpenEyeHandoff>() == null)
             gameObject.AddComponent<OpenEyeHandoff>();
-        // Clock sync: Neon-style PC↔Quest time-echo (round-trip), driven by OpenEye PC.
 
         if (autoConnectOnStart)
             _ = StartConnectLoop();
+
+        StartCoroutine(StartupTcpBounce());
+    }
+
+    System.Collections.IEnumerator StartupTcpBounce()
+    {
+        yield return new WaitForSecondsRealtime(1.5f);
+        if (!Application.isPlaying || _didStartupBounce)
+            yield break;
+        _didStartupBounce = true;
+        Debug.Log("[OpenEye] startup TCP bounce (heal Intent-launch dead socket)");
+        Disconnect();
+        yield return new WaitForSecondsRealtime(0.35f);
+        Connect();
+    }
+
+    System.Collections.IEnumerator GazeWatchdogBounce()
+    {
+        Disconnect();
+        yield return new WaitForSecondsRealtime(0.4f);
+        Connect();
     }
 
     void Update()
@@ -126,6 +150,16 @@ public class OpenEyeGazeReceiver : MonoBehaviour
             {
                 Debug.LogWarning("[OpenEye] mainStudyStart: GameManager missing");
             }
+        }
+
+        if (CurrentState == State.Connected && _connectedAt > 0f
+            && Time.unscaledTime - _connectedAt > 2.5f
+            && GazeSequence == _gazeSeqWhenConnected)
+        {
+            Debug.LogWarning("[OpenEye] connected but no gazeVisual — forcing reconnect");
+            _connectedAt = Time.unscaledTime;
+            _gazeSeqWhenConnected = GazeSequence;
+            StartCoroutine(GazeWatchdogBounce());
         }
     }
 
@@ -374,5 +408,29 @@ public class OpenEyeGazeReceiver : MonoBehaviour
     {
         CurrentState = state;
         Debug.Log($"[OpenEye] state = {state}");
+        if (state == State.Connected)
+        {
+            _connectedAt = Time.unscaledTime;
+            _gazeSeqWhenConnected = GazeSequence;
+            SendSessionHello();
+        }
+        else if (state == State.Disconnected || state == State.Failed)
+        {
+            _connectedAt = -1f;
+        }
+    }
+
+    void SendSessionHello()
+    {
+        string scene = "IDLE";
+        if (GameManager.instance != null)
+            scene = GameManager.instance.current_scene.ToString();
+
+        string pkg = Application.identifier;
+        string json =
+            "{\"type\":\"sessionHello\",\"payload\":{\"package\":\"" + pkg +
+            "\",\"scene\":\"" + scene + "\"}}";
+        if (TrySendJson(json))
+            Debug.Log($"[OpenEye] sessionHello package={pkg} scene={scene}");
     }
 }
