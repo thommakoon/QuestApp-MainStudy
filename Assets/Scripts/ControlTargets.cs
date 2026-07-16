@@ -1,4 +1,5 @@
 using System;
+using StudyDesign;
 using Unity.VisualScripting;
 //using UnityEditor.Experimental.GraphView;
 using UnityEngine;
@@ -18,13 +19,18 @@ public class ControlTargets : MonoBehaviour
     public GameObject semo;
 
     Color[] colors = new Color[] { Color.red, Color.green, Color.blue, Color.cyan, Color.magenta, Color.yellow };
-    private int totalTargetNumber = 11;
-    private float defaultDistance = 1f;
+    private int totalTargetNumber = FittsRingPresets.TargetCount;
+    private float defaultDistance = FittsRingPresets.DepthM;
 
-    private float targetSize = Mathf.Tan(Mathf.Deg2Rad * 2.5f) *2*2 ; // for 5 degrees
-    //private float targetSize = Mathf.Tan(Mathf.Deg2Rad * 1.5f) * 2; // for 3 degrees
-
+    private float targetSize = Mathf.Tan(Mathf.Deg2Rad * 2.5f) * 2 * 2; // ring 0 default
     private float wide = Mathf.Tan(15f * Mathf.Deg2Rad);
+
+    /// <summary>Active FittsRingPresets index (0 = ID≈2.0 … 5 = ID=3.0).</summary>
+    public int ActiveRingIndex { get; private set; }
+
+    /// <summary>Shuffled preset indices for this trial; reshuffled after each full pass.</summary>
+    int[] _ringOrder;
+    int _ringOrderPos;
 
     // Start is called before the first frame update
     void Awake()
@@ -34,6 +40,7 @@ public class ControlTargets : MonoBehaviour
         makeTargets();
         makeMenuTargets();
         FittsTarget.SetActive(false);
+        ApplyRingLayout(0, force: true);
     }
     private void Start()
     {
@@ -262,5 +269,121 @@ public class ControlTargets : MonoBehaviour
             return targets.transform.GetChild(targetNum);
         }
 
+    }
+
+    public float GetFittsWidthM()
+    {
+        return targetSize;
+    }
+
+    public float GetFittsAmplitudeM(int startIdx, int endIdx)
+    {
+        if (targets == null || startIdx < 0 || endIdx < 0
+            || startIdx >= totalTargetNumber || endIdx >= totalTargetNumber)
+            return 0f;
+        Vector3 start = targets.transform.GetChild(startIdx).localPosition;
+        Vector3 end = targets.transform.GetChild(endIdx).localPosition;
+        return Vector3.Distance(start, end);
+    }
+
+    public FittsLayoutMetrics GetFittsLayoutMetrics(int stepNum)
+    {
+        var layout = FittsRingPresets.Get(ActiveRingIndex);
+        return new FittsLayoutMetrics
+        {
+            ring_index = layout.index,
+            ring_name = layout.name,
+            amplitude_m = layout.amplitude_m,
+            width_m = layout.width_m,
+            index_of_difficulty_bits = layout.index_of_difficulty_bits,
+            step_num = stepNum,
+            total_targets = totalTargetNumber,
+        };
+    }
+
+    /// <summary>
+    /// New random order of all rings. Call at each timed trial start (e.g. 5 min block).
+    /// </summary>
+    public void ResetRingSequence()
+    {
+        ShuffleRingOrder();
+        _ringOrderPos = 0;
+        ApplyRingLayout(_ringOrder[0], force: true);
+        Debug.Log($"Fitts ring order (trial start): {FormatRingOrder()}");
+    }
+
+    /// <summary>
+    /// After one full 11-target lap: next ring in the current random order.
+    /// After all rings used once, reshuffle and continue.
+    /// </summary>
+    public void AdvanceRingSequence()
+    {
+        if (_ringOrder == null || _ringOrder.Length == 0)
+            ShuffleRingOrder();
+
+        _ringOrderPos++;
+        if (_ringOrderPos >= _ringOrder.Length)
+        {
+            ShuffleRingOrder();
+            _ringOrderPos = 0;
+            Debug.Log($"Fitts ring order (reshuffle): {FormatRingOrder()}");
+        }
+
+        int next = _ringOrder[_ringOrderPos];
+        ApplyRingLayout(next, force: true);
+        Debug.Log($"Fitts ring advanced → index {next} ID={FittsRingPresets.Get(next).index_of_difficulty_bits:F3}");
+    }
+
+    void ShuffleRingOrder()
+    {
+        int n = FittsRingPresets.Rings.Length;
+        if (_ringOrder == null || _ringOrder.Length != n)
+            _ringOrder = new int[n];
+        for (int i = 0; i < n; i++)
+            _ringOrder[i] = i;
+
+        // Fisher–Yates
+        for (int i = n - 1; i > 0; i--)
+        {
+            int j = UnityEngine.Random.Range(0, i + 1);
+            int tmp = _ringOrder[i];
+            _ringOrder[i] = _ringOrder[j];
+            _ringOrder[j] = tmp;
+        }
+    }
+
+    string FormatRingOrder()
+    {
+        if (_ringOrder == null)
+            return "(none)";
+        var parts = new string[_ringOrder.Length];
+        for (int i = 0; i < _ringOrder.Length; i++)
+        {
+            var r = FittsRingPresets.Get(_ringOrder[i]);
+            parts[i] = $"{r.index}:{r.index_of_difficulty_bits:F2}";
+        }
+        return string.Join(" → ", parts);
+    }
+
+    public void ApplyRingLayout(int ringIndex, bool force = false)
+    {
+        if (!force && ringIndex == ActiveRingIndex)
+            return;
+
+        var layout = FittsRingPresets.Get(ringIndex);
+        ActiveRingIndex = layout.index;
+        wide = layout.ring_radius_m;
+        targetSize = layout.width_m;
+
+        if (targets == null)
+            return;
+
+        for (int i = 0; i < totalTargetNumber && i < targets.transform.childCount; i++)
+        {
+            Transform t = targets.transform.GetChild(i);
+            float angle = i * Mathf.PI * 2f / totalTargetNumber;
+            t.localPosition = new Vector3(wide * Mathf.Sin(angle), wide * Mathf.Cos(angle), 0f);
+            t.localScale = Vector3.one * targetSize;
+        }
     }
 }

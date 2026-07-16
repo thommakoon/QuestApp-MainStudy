@@ -229,6 +229,13 @@ public class GameManager : MonoBehaviour
                 _trialLogSeq = 0;
                 _trialElapsedSec = 0f;
                 _endingTimedTrial = false;
+                if (study.fittsLaw != null && !study.fittsLaw.menu)
+                {
+                    study.fittsLaw.ClearSelectionLogs();
+                    study.fittsLaw.MarkSelectionStart();
+                }
+                if (targetControl != null)
+                    targetControl.ResetRingSequence();
                 break;
 
             case SCENE.AFTER_TRIAL:
@@ -349,7 +356,7 @@ public class GameManager : MonoBehaviour
 
                 if (study.fittsLaw.check_timeout() && study.fittsLaw.onGoing == false)
                 {
-                    study.fittsLaw.nextStep(success: false);
+                    study.fittsLaw.nextStep(success: false, eventType: "timeout");
                 }
                 break;
 
