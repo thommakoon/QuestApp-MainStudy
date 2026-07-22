@@ -10,7 +10,27 @@ public class GazeRayVisualizer : MonoBehaviour
     public Color rayColor = new Color(0f, 0.85f, 1f, 0.9f);
     public Color headRayColor = new Color(1f, 0.75f, 0.2f, 0.9f);
 
+    /// <summary>When false, eye/head debug ray and hand LineRenderers are hidden.</summary>
+    public bool showRay = true;
+
     LineRenderer _line;
+
+    public static void SetRaysVisible(bool visible)
+    {
+        foreach (var viz in FindObjectsOfType<GazeRayVisualizer>(true))
+            viz.showRay = visible;
+
+        // Hand Meta RayInteractor lasers (LineRenderers under HandProvider).
+        foreach (var hp in FindObjectsOfType<HandProvider>(true))
+        {
+            if (hp == null || hp.rightHandRayInteractor == null)
+                continue;
+            foreach (var lr in hp.rightHandRayInteractor.GetComponentsInChildren<LineRenderer>(true))
+                lr.enabled = visible;
+        }
+
+        Debug.Log($"[Ray] visible={visible}");
+    }
 
     void Awake()
     {
@@ -26,6 +46,13 @@ public class GazeRayVisualizer : MonoBehaviour
 
     void LateUpdate()
     {
+        if (!showRay)
+        {
+            if (_line != null)
+                _line.enabled = false;
+            return;
+        }
+
         EnsureProviders();
 
         bool preferHead = GameManager.instance != null

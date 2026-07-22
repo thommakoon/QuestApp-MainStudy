@@ -51,22 +51,28 @@ public class OpenEyeGazeReceiver : MonoBehaviour
     [Serializable] class PayloadMainStudyDone
     {
         public bool ok;
+        public bool stopped;
         public int sub_num;
         public int subsub_num;
         public string condition;
         public int reps;
     }
+    [Serializable] class PayloadShowRay { public bool visible; }
     [Serializable] class MsgGaze { public string type; public PayloadGaze payload; }
     [Serializable] class MsgLaunch { public string type; public PayloadLaunch payload; }
     [Serializable] class MsgTimeEcho { public string type; public PayloadTimeEcho payload; }
     [Serializable] class MsgMainStudyStart { public string type; public PayloadMainStudyStart payload; }
     [Serializable] class MsgMainStudyDone { public string type; public PayloadMainStudyDone payload; }
+    [Serializable] class MsgShowRay { public string type; public PayloadShowRay payload; }
 
     public event Action<string> OnLaunchApp;
 
     volatile bool _pendingLaunchApp;
     volatile string _pendingLaunchPackage = "";
     volatile bool _pendingMainStudyStart;
+    volatile bool _pendingMainStudyStop;
+    volatile bool _pendingShowRay;
+    volatile bool _pendingShowRayVisible = true;
     volatile int _pendingMsSub;
     volatile int _pendingMsSubsub;
     volatile int _pendingMsReps;
@@ -150,6 +156,27 @@ public class OpenEyeGazeReceiver : MonoBehaviour
             {
                 Debug.LogWarning("[OpenEye] mainStudyStart: GameManager missing");
             }
+        }
+
+        if (_pendingMainStudyStop)
+        {
+            _pendingMainStudyStop = false;
+            _pendingMainStudyStart = false; // cancel a start that arrived same frame
+            if (GameManager.instance != null)
+            {
+                GameManager.instance.AbortToIdleFromPc();
+                Debug.Log("[OpenEye] mainStudyStop → AbortToIdleFromPc");
+            }
+            else
+            {
+                Debug.LogWarning("[OpenEye] mainStudyStop: GameManager missing");
+            }
+        }
+
+        if (_pendingShowRay)
+        {
+            _pendingShowRay = false;
+            GazeRayVisualizer.SetRaysVisible(_pendingShowRayVisible);
         }
 
         if (CurrentState == State.Connected && _connectedAt > 0f
@@ -286,6 +313,20 @@ public class OpenEyeGazeReceiver : MonoBehaviour
                     continue;
                 }
 
+                if (head.type == "mainStudyStop")
+                {
+                    _pendingMainStudyStop = true;
+                    continue;
+                }
+
+                if (head.type == "showRay")
+                {
+                    var msg = JsonUtility.FromJson<MsgShowRay>(json);
+                    _pendingShowRayVisible = msg?.payload == null || msg.payload.visible;
+                    _pendingShowRay = true;
+                    continue;
+                }
+
                 if (head.type != "gazeVisual")
                     continue;
 
@@ -337,15 +378,23 @@ public class OpenEyeGazeReceiver : MonoBehaviour
 
     public bool TrySendMainStudyDone(bool ok, int subNum, int subsubNum, string condition, int reps)
     {
+        return TrySendMainStudyDone(ok, subNum, subsubNum, condition, reps, stopped: false);
+    }
+
+    public bool TrySendMainStudyDone(bool ok, int subNum, int subsubNum, string condition, int reps, bool stopped)
+    {
         if (_stream == null || CurrentState != State.Connected)
             return false;
 
+        // JsonUtility cannot serialize arbitrary extra fields on nested class easily
+        // without adding the field — use stopped on payload.
         var msg = new MsgMainStudyDone
         {
             type = "mainStudyDone",
             payload = new PayloadMainStudyDone
             {
                 ok = ok,
+                stopped = stopped,
                 sub_num = subNum,
                 subsub_num = subsubNum,
                 condition = condition ?? "",

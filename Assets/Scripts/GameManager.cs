@@ -166,17 +166,62 @@ public class GameManager : MonoBehaviour
         _returnToIdleAfterTrial = true;
     }
 
-    void NotifyPcConditionDone(bool ok)
+    /// <summary>PC Stop: abort current condition, optionally save mid-trial data, return IDLE.</summary>
+    public void AbortToIdleFromPc()
+    {
+        Debug.Log($"[MainStudy] abort → IDLE (was {current_scene})");
+        _endingTimedTrial = false;
+        _returnToIdleAfterTrial = false;
+        after_progress = 0f;
+        break_progress = 0f;
+
+        if (current_scene == SCENE.TRIAL && study != null)
+        {
+            // Save partial trial JSON if we were logging.
+            try
+            {
+                switch (study.currentCursor)
+                {
+                    case Study.CursorType.Eye:
+                        data_to_save_eye?.SaveDataJson();
+                        break;
+                    case Study.CursorType.Head:
+                        data_to_save_head?.SaveDataJson();
+                        break;
+                    case Study.CursorType.Hand:
+                        data_to_save_hand?.SaveDataJson();
+                        break;
+                }
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogWarning($"[MainStudy] abort save failed: {e.Message}");
+            }
+            study.fittsLaw?.finish();
+        }
+
+        targetControl.ShowDwellTarget(false);
+        targetControl.ShowTargets(false);
+        targetControl.ShowMenuTargets(false);
+
+        NotifyPcConditionDone(ok: false, stopped: true);
+        SceneChange(SCENE.IDLE);
+    }
+
+    void NotifyPcConditionDone(bool ok, bool stopped = false)
     {
         var receiver = FindObjectOfType<OpenEyeGazeReceiver>();
-        if (receiver == null || study == null)
+        if (receiver == null)
             return;
+        int sub = study != null ? study.sub_num : 0;
+        int subsub = study != null ? study.subsub_num : 0;
         receiver.TrySendMainStudyDone(
             ok: ok,
-            subNum: study.sub_num,
-            subsubNum: study.subsub_num,
-            condition: _lastCommandedCondition,
-            reps: _lastCommandedReps);
+            subNum: sub,
+            subsubNum: subsub,
+            condition: _lastCommandedCondition ?? "",
+            reps: _lastCommandedReps,
+            stopped: stopped);
     }
 
     void HandleLog(string message, string stackTrace, LogType type)

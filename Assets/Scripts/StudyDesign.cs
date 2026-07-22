@@ -82,10 +82,10 @@ namespace StudyDesign
 
         void InitFixedConditions()
         {
-            // Fixed study order (no latin square): EyeDwell → HandPinch → EyePinch.
+            // Fixed study order (no latin square): HeadPinch → HandPinch → EyePinch.
             Conditions = new ConditionType[]
             {
-                ConditionType.EyeDwell,
+                ConditionType.HeadPinch,
                 ConditionType.HandPinch,
                 ConditionType.EyePinch,
             };
